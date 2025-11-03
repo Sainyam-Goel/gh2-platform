@@ -18,6 +18,10 @@ app = FastAPI(title="GH2 Backend")
 if CORSMiddleware:
     app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_headers=['*'], allow_methods=['*'])
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # in-memory stores for demo
 PACKETS: List[dict] = []
 BATCHES: Dict[str, ProductionBatch] = {}
