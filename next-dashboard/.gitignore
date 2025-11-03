@@ -1,7 +1,0 @@
-/node_modules
-/.next
-/.turbo
-/.vercel
-.env*
-yarn.lock
-pnpm-lock.yaml
