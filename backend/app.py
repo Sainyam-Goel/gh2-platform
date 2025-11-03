@@ -4,7 +4,7 @@ try:
 except:
     CORSMiddleware = None
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import os, io, csv
 
 from .models import SensorPacket, ProductionBatch
@@ -26,24 +26,24 @@ ISSUED: Dict[str, float] = {}  # site_id -> kg issued
 RETIRED: Dict[str, float] = {} # site_id -> kg retired
 
 # --- helpers ---
-def _auth(x_api_key: str | None):
+def _auth(x_api_key: Optional[str]):
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="invalid api key")
 
 # --- endpoints ---
 @app.get('/me')
-def me(x_api_key: str | None = None, x_role: str | None = None):
+def me(x_api_key: Optional[str] = None, x_role: Optional[str] = None):
     _auth(x_api_key)
     return {"role": x_role or API_ROLE_DEFAULT}
 
 @app.post('/ingest')
-def ingest(packet: SensorPacket, x_api_key: str | None = None):
+def ingest(packet: SensorPacket, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     PACKETS.append(packet.model_dump())
     return {"ok": True, "stored": len(PACKETS)}
 
 @app.post('/verify-and-batch')
-def verify_and_batch(site_id: str, x_api_key: str | None = None):
+def verify_and_batch(site_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     window = PACKETS[-20:] if len(PACKETS) >= 5 else PACKETS[:]
     elec = sum([p['sensors'][0]['v'] for p in window if p['site_id']==site_id]) if window else 0.0
@@ -66,14 +66,14 @@ def verify_and_batch(site_id: str, x_api_key: str | None = None):
     return {"ok": True, "batch": batch.model_dump()}
 
 @app.get('/batches')
-def get_batches(x_api_key: str | None = None):
+def get_batches(x_api_key: Optional[str] = None):
     _auth(x_api_key)
     items = [b.model_dump() for b in BATCHES.values()]
     items.sort(key=lambda x: x['start'], reverse=True)
     return items
 
 @app.post('/attest')
-def attest(batch_id: str, x_api_key: str | None = None):
+def attest(batch_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     batch = BATCHES[batch_id]
     vc_dict: Dict[str, Any] = {
@@ -97,7 +97,7 @@ def attest(batch_id: str, x_api_key: str | None = None):
     return {"ok": True, "vc": vc_signed.model_dump()}
 
 @app.get('/vc/{batch_id}')
-def get_vc(batch_id: str, x_api_key: str | None = None):
+def get_vc(batch_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     v = VCS.get(batch_id)
     if not v:
@@ -105,7 +105,7 @@ def get_vc(batch_id: str, x_api_key: str | None = None):
     return v
 
 @app.post('/anchor')
-def anchor(batch_id: str, x_api_key: str | None = None):
+def anchor(batch_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     vc = VCS[batch_id]
     h = vc_hash(vc)
@@ -115,7 +115,7 @@ def anchor(batch_id: str, x_api_key: str | None = None):
     return {"ok": True, "vc_hash": h, "txid": txid, "anchor_id": anchor_id}
 
 @app.post('/issue')
-def issue(batch_id: str, x_api_key: str | None = None):
+def issue(batch_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     batch = BATCHES[batch_id]
     kg = batch.h2_mass_kg
@@ -123,12 +123,12 @@ def issue(batch_id: str, x_api_key: str | None = None):
     return {"ok": True, "issued": kg, "to_site_balance_kg": ISSUED[batch.site_id]}
 
 @app.get('/balances/{site_id}')
-def get_balance(site_id: str, x_api_key: str | None = None):
+def get_balance(site_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     return {"balance_kg": ISSUED.get(site_id, 0.0), "retired_kg": RETIRED.get(site_id, 0.0)}
 
 @app.post('/retire')
-def retire(site_id: str, amount_kg: float, purpose: str | None = None, x_api_key: str | None = None):
+def retire(site_id: str, amount_kg: float, purpose: Optional[str] = None, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     bal = ISSUED.get(site_id, 0.0)
     if amount_kg > bal:
@@ -146,7 +146,7 @@ def retire(site_id: str, amount_kg: float, purpose: str | None = None, x_api_key
     return {"ok": True, "certificate": cert}
 
 @app.get('/export/batches.csv')
-def export_batches_csv(site_id: str | None = None, x_api_key: str | None = None):
+def export_batches_csv(site_id: Optional[str] = None, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     output = io.StringIO()
     w = csv.writer(output)
@@ -157,7 +157,7 @@ def export_batches_csv(site_id: str | None = None, x_api_key: str | None = None)
     return Response(content=output.getvalue(), media_type='text/csv')
 
 @app.get('/export/wallet.csv')
-def export_wallet_csv(site_id: str, x_api_key: str | None = None):
+def export_wallet_csv(site_id: str, x_api_key: Optional[str] = None):
     _auth(x_api_key)
     output = io.StringIO()
     w = csv.writer(output)

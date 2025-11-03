@@ -1,10 +1,27 @@
-export default function Modal({title, children, onClose, actions}:{title:string, children:React.ReactNode, onClose:()=>void, actions:React.ReactNode}){
+'use client'
+
+import { ReactNode } from 'react'
+
+type ModalProps = {
+  title: string
+  children: ReactNode
+  onClose: () => void
+  actions: ReactNode
+}
+
+export default function Modal({ title, children, onClose, actions }: ModalProps) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow w-full max-w-lg p-5 space-y-3" onClick={e=>e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg space-y-3 rounded-xl bg-white p-5 shadow"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="text-lg font-semibold">{title}</div>
         <div className="text-sm text-gray-700">{children}</div>
-        <div className="flex gap-2 justify-end">{actions}</div>
+        <div className="flex justify-end gap-2">{actions}</div>
       </div>
     </div>
   )

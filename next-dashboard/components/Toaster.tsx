@@ -1,20 +1,48 @@
 'use client'
-import { createContext, useContext, useState } from 'react'
 
-const Ctx = createContext<{push:(t:Msg)=>void}>({push:()=>{}})
-type Msg = { type: 'success'|'error'|'info', text: string }
+import { useEffect, useState } from 'react'
 
-export function Toaster(){
-  const [list, setList] = useState<Msg[]>([])
-  return (<Ctx.Provider value={{ push:(m)=>{ setList(l=>[...l, m]); setTimeout(()=> setList(l=>l.slice(1)), 2500) } }}>
-    <div className="fixed bottom-4 right-4 space-y-2 z-50">
-      {list.map((m,i)=> (<div key={i} className="rounded bg-black text-white px-4 py-2 shadow">{m.text}</div>))}
-    </div>
-  </Ctx.Provider>)
+type Msg = { id: string; type: 'success' | 'error' | 'info'; text: string }
+
+const subscribers = new Set<(msg: Msg) => void>()
+
+function emit(type: Msg['type'], text: string) {
+  const payload: Msg = { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, type, text }
+  subscribers.forEach((fn) => fn(payload))
 }
 
 export const toast = {
-  success:(t:string)=>{ const {push} = useContext(Ctx) as any; push({type:'success', text:t}) },
-  error:(t:string)=>{ const {push} = useContext(Ctx) as any; push({type:'error', text:t}) },
-  info:(t:string)=>{ const {push} = useContext(Ctx) as any; push({type:'info', text:t}) },
+  success: (text: string) => emit('success', text),
+  error: (text: string) => emit('error', text),
+  info: (text: string) => emit('info', text),
+}
+
+export function Toaster() {
+  const [list, setList] = useState<Msg[]>([])
+
+  useEffect(() => {
+    const handler = (msg: Msg) => {
+      setList((prev) => [...prev, msg])
+      setTimeout(() => {
+        setList((prev) => prev.filter((entry) => entry.id !== msg.id))
+      }, 2500)
+    }
+    subscribers.add(handler)
+    return () => {
+      subscribers.delete(handler)
+    }
+  }, [])
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 space-y-2">
+      {list.map((m) => (
+        <div
+          key={m.id}
+          className="rounded bg-slate-900 px-4 py-2 text-sm text-white shadow"
+        >
+          {m.text}
+        </div>
+      ))}
+    </div>
+  )
 }

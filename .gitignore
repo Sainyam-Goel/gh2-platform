@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+next-dashboard/node_modules/
+next-dashboard/.next/
+next-dashboard/out/
+
+.DS_Store
+env/
+.env
