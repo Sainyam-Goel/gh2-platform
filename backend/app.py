@@ -1,17 +1,18 @@
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException, Response
 try:
     from fastapi.middleware.cors import CORSMiddleware
 except:
     CORSMiddleware = None
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
-import os
+import os, io, csv
 
 from .models import SensorPacket, ProductionBatch
 from .issuer import sign_vc, vc_hash
 from .anchor import anchor_to_chain 
 
 API_KEY = os.getenv('API_KEY')
+API_ROLE_DEFAULT = os.getenv('API_ROLE', 'producer')  # demo-only role
 
 app = FastAPI(title="GH2 Backend")
 if CORSMiddleware:
@@ -30,6 +31,11 @@ def _auth(x_api_key: str | None):
         raise HTTPException(status_code=401, detail="invalid api key")
 
 # --- endpoints ---
+@app.get('/me')
+def me(x_api_key: str | None = None, x_role: str | None = None):
+    _auth(x_api_key)
+    return {"role": x_role or API_ROLE_DEFAULT}
+
 @app.post('/ingest')
 def ingest(packet: SensorPacket, x_api_key: str | None = None):
     _auth(x_api_key)
@@ -122,7 +128,7 @@ def get_balance(site_id: str, x_api_key: str | None = None):
     return {"balance_kg": ISSUED.get(site_id, 0.0), "retired_kg": RETIRED.get(site_id, 0.0)}
 
 @app.post('/retire')
-def retire(site_id: str, amount_kg: float, x_api_key: str | None = None):
+def retire(site_id: str, amount_kg: float, purpose: str | None = None, x_api_key: str | None = None):
     _auth(x_api_key)
     bal = ISSUED.get(site_id, 0.0)
     if amount_kg > bal:
@@ -133,7 +139,31 @@ def retire(site_id: str, amount_kg: float, x_api_key: str | None = None):
         "type": "GH2RetirementCertificate",
         "site_id": site_id,
         "amount_kg": amount_kg,
+        "purpose": purpose,
         "retired_at": datetime.utcnow().isoformat()+"Z",
         "evidence": {"vc_hashes": [b.vc_hash for b in BATCHES.values() if b.site_id==site_id and b.vc_hash]}
     }
     return {"ok": True, "certificate": cert}
+
+@app.get('/export/batches.csv')
+def export_batches_csv(site_id: str | None = None, x_api_key: str | None = None):
+    _auth(x_api_key)
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(['batch_id','site_id','start','end','h2_mass_kg','elec_kWh','water_L','status','vc_hash'])
+    for b in sorted(BATCHES.values(), key=lambda x: x.start):
+        if site_id and b.site_id != site_id: continue
+        w.writerow([b.batch_id, b.site_id, b.start.isoformat(), b.end.isoformat(), b.h2_mass_kg, b.elec_kWh, b.water_L, b.status, b.vc_hash or ''])
+    return Response(content=output.getvalue(), media_type='text/csv')
+
+@app.get('/export/wallet.csv')
+def export_wallet_csv(site_id: str, x_api_key: str | None = None):
+    _auth(x_api_key)
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(['site_id','issued_kg','retired_kg','balance_kg'])
+    issued = ISSUED.get(site_id, 0.0)
+    retired = RETIRED.get(site_id, 0.0)
+    balance = issued
+    w.writerow([site_id, issued, retired, balance])
+    return Response(content=output.getvalue(), media_type='text/csv')
